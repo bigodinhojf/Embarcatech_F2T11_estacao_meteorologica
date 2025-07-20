@@ -35,14 +35,21 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(Embarcatech_F2T11_estacao_meteorologica Embarcatech_F2T11_estacao_meteorologica.c )
+include_directories( ${CMAKE_SOURCE_DIR}/lib ) # Inclui os files .h na pasta lib
+
+add_executable( Embarcatech_F2T11_estacao_meteorologica 
+        Embarcatech_F2T11_estacao_meteorologica.c 
+        lib/aht20.c 
+        lib/bmp280.c 
+        lib/ssd1306.c
+        )
 
 pico_set_program_name(Embarcatech_F2T11_estacao_meteorologica "Embarcatech_F2T11_estacao_meteorologica")
 pico_set_program_version(Embarcatech_F2T11_estacao_meteorologica "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(Embarcatech_F2T11_estacao_meteorologica 0)
-pico_enable_stdio_usb(Embarcatech_F2T11_estacao_meteorologica 0)
+pico_enable_stdio_usb(Embarcatech_F2T11_estacao_meteorologica 1)
 
 # Add the standard library to the build
 target_link_libraries(Embarcatech_F2T11_estacao_meteorologica
@@ -55,7 +62,7 @@ target_include_directories(Embarcatech_F2T11_estacao_meteorologica PRIVATE
 
 # Add any user requested libraries
 target_link_libraries(Embarcatech_F2T11_estacao_meteorologica 
-        
+        hardware_i2c
         )
 
 pico_add_extra_outputs(Embarcatech_F2T11_estacao_meteorologica)

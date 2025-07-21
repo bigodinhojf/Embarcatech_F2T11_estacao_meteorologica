@@ -44,6 +44,9 @@ add_executable( Embarcatech_F2T11_estacao_meteorologica
         lib/ssd1306.c
         )
 
+# Generate PIO header
+pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
+
 pico_set_program_name(Embarcatech_F2T11_estacao_meteorologica "Embarcatech_F2T11_estacao_meteorologica")
 pico_set_program_version(Embarcatech_F2T11_estacao_meteorologica "0.1")
 
@@ -63,6 +66,7 @@ target_include_directories(Embarcatech_F2T11_estacao_meteorologica PRIVATE
 # Add any user requested libraries
 target_link_libraries(Embarcatech_F2T11_estacao_meteorologica 
         hardware_i2c
+        hardware_pio
         )
 
 pico_add_extra_outputs(Embarcatech_F2T11_estacao_meteorologica)

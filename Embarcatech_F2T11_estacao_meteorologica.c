@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
+#include "hardware/pio.h"
+#include "ws2812.pio.h"
 #include "aht20.h"
 #include "bmp280.h"
 #include "ssd1306.h"
@@ -38,6 +40,8 @@ ssd1306_t ssd; // Inicializa a estrutura do display
 #define button_A 5 // Botão A GPIO 5
 #define button_B 6 // Botão B GPIO 6
 #define button_J 22 // Botão do Joystick GPIO 22
+#define matriz_leds 7 // Matriz de LEDs GPIO 7
+#define NUM_LEDS 25 // Número de LEDs na matriz
 
 
 // -- Definição de variáveis globais
@@ -63,6 +67,59 @@ char str_temperatura_min[5]; // Armazena o valor de temperatura mínima em strin
 char str_temperatura_max[5]; // Armazena o valor de temperatura máxima em string
 char str_umidade_min[5]; // Armazena o valor de umidade mínima em string
 char str_umidade_max[5]; // Armazena o valor de umidade máxima em string
+
+
+// --- Funções necessária para a manipulação da matriz de LEDs
+
+// Estrutura do pixel GRB (Padrão do WS2812)
+struct pixel_t {
+    uint8_t G, R, B; // Define variáveis de 8-bits (0 a 255) para armazenar a cor
+};
+typedef struct pixel_t pixel_t;
+typedef pixel_t npLED_t; // Permite declarar variáveis utilizando apenas "npLED_t"
+
+// Declaração da Array que representa a matriz de LEDs
+npLED_t leds[NUM_LEDS];
+
+// Variáveis para máquina PIO
+PIO np_pio;
+uint sm;
+
+// Função para definir a cor de um LED específico
+void cor(const uint index, const uint8_t r, const uint8_t g, const uint8_t b) {
+    leds[index].R = r;
+    leds[index].G = g;
+    leds[index].B = b;
+}
+
+// Função para desligar todos os LEDs
+void desliga() {
+    for (uint i = 0; i < NUM_LEDS; ++i) {
+        cor(i, 0, 0, 0);
+    }
+}
+
+// Função para enviar o estado atual dos LEDs ao hardware  - buffer de saída
+void buffer() {
+    for (uint i = 0; i < NUM_LEDS; ++i) {
+        pio_sm_put_blocking(np_pio, sm, leds[i].G);
+        pio_sm_put_blocking(np_pio, sm, leds[i].R);
+        pio_sm_put_blocking(np_pio, sm, leds[i].B);
+    }
+}
+
+// Função para converter a posição da matriz para uma posição do vetor.
+int getIndex(int x, int y) {
+    // Se a linha for par (0, 2, 4), percorremos da esquerda para a direita.
+    // Se a linha for ímpar (1, 3), percorremos da direita para a esquerda.
+    if (y % 2 == 0) {
+        return 24-(y * 5 + x); // Linha par (esquerda para direita).
+    } else {
+        return 24-(y * 5 + (4 - x)); // Linha ímpar (direita para esquerda).
+    }
+}
+
+// --- Final das funções necessária para a manipulação da matriz de LEDs
 
 
 // -- Funções
@@ -180,9 +237,9 @@ void atualizar_display(){
         ssd1306_line(&ssd, 1, 51, 126, 51, true); // Desenha uma linha horizontal
 
         // Status da temperatura
-        if(data.temperature > temperatura_max){
+        if(data.temperature >= temperatura_max){
             ssd1306_draw_string(&ssd, "Alerta: T > Max", 2, 53); // Desenha uma string
-        }else if(data.temperature < temperatura_min){
+        }else if(data.temperature <= temperatura_min){
             ssd1306_draw_string(&ssd, "Alerta: T < Min", 2, 53); // Desenha uma string
         }else{
             ssd1306_draw_string(&ssd, "Status: Ok", 24, 53); // Desenha uma string
@@ -215,15 +272,53 @@ void atualizar_display(){
         ssd1306_line(&ssd, 1, 51, 126, 51, true); // Desenha uma linha horizontal
 
         // Status da temperatura
-        if(data.humidity > umidade_max){
+        if(data.humidity >= umidade_max){
             ssd1306_draw_string(&ssd, "Alerta: U > Max", 2, 53); // Desenha uma string
-        }else if(data.humidity < umidade_min){
+        }else if(data.humidity <= umidade_min){
             ssd1306_draw_string(&ssd, "Alerta: U < Min", 2, 53); // Desenha uma string
         }else{
             ssd1306_draw_string(&ssd, "Status: Ok", 24, 53); // Desenha uma string
         }
     }
     ssd1306_send_data(&ssd); // Atualiza o display
+}
+
+// Função para atualizar a matriz de LEDs
+void atualizar_matriz(bool alerta){
+    desliga();
+    if(alerta){
+        // Frame "!"
+        int frame0[5][5][3] = {
+            {{0, 0, 0}, {0, 0, 0}, {150, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {150, 0, 0}, {0, 0, 0}, {0, 0, 0}},    
+            {{0, 0, 0}, {0, 0, 0}, {150, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {150, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+        };
+        for (int linha = 0; linha < 5; linha++){
+            for (int coluna = 0; coluna < 5; coluna++){
+                int posicao = getIndex(linha, coluna);
+                cor(posicao, frame0[coluna][linha][0], frame0[coluna][linha][1], frame0[coluna][linha][2]);
+            }
+        };
+        buffer();
+    }else{
+        // Frame "Check"
+        int frame1[5][5][3] = {
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 150, 0}},    
+            {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 150, 0}, {0, 0, 0}},
+            {{0, 150, 0}, {0, 0, 0}, {0, 150, 0}, {0, 0, 0}, {0, 0, 0}},
+            {{0, 0, 0}, {0, 150, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+        };
+        for (int linha = 0; linha < 5; linha++){
+            for (int coluna = 0; coluna < 5; coluna++){
+                int posicao = getIndex(linha, coluna);
+                cor(posicao, frame1[coluna][linha][0], frame1[coluna][linha][1], frame1[coluna][linha][2]);
+            }
+        };
+        buffer();
+    }
 }
 
 // Função de interrupção dos botões
@@ -270,6 +365,14 @@ int main(){
     gpio_set_irq_enabled_with_callback(button_B, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler); // Interrupção do botão B
     gpio_set_irq_enabled_with_callback(button_J, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler); // Interrupção do botão do joystick
 
+    // Inicialização do PIO
+    np_pio = pio0;
+    sm = pio_claim_unused_sm(np_pio, true);
+    uint offset = pio_add_program(pio0, &ws2818b_program);
+    ws2818b_program_init(np_pio, sm, offset, matriz_leds, 800000);
+    desliga(); // Para limpar o buffer dos LEDs
+    buffer(); // Atualiza a matriz de LEDs
+
     // Inicialização do Display OLED
     i2c_init(display_i2c_port, 400 * 1000); // Inicializa o I2C usando 400kHz
     gpio_set_function(display_i2c_sda, GPIO_FUNC_I2C); // Define o pino SDA (GPIO 14) na função I2C
@@ -301,6 +404,12 @@ int main(){
         
         ler_bmp280(); // Leitura do sensor BMP280
         ler_aht10();  // Leitura do sensor AHT10
+        
+        if(data.temperature <= temperatura_min || data.temperature >= temperatura_max || data.humidity <= umidade_min || data.humidity >= umidade_max){
+            atualizar_matriz(true);
+        }else{
+            atualizar_matriz(false);
+        }
         
         atualizar_display(); // Atualiza o display OLED
 

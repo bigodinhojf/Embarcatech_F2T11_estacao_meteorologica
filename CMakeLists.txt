@@ -66,7 +66,10 @@ target_include_directories(Embarcatech_F2T11_estacao_meteorologica PRIVATE
 # Add any user requested libraries
 target_link_libraries(Embarcatech_F2T11_estacao_meteorologica 
         hardware_i2c
+        hardware_pwm
+        hardware_timer
         hardware_pio
+        pico_cyw43_arch_lwip_threadsafe_background
         )
 
 pico_add_extra_outputs(Embarcatech_F2T11_estacao_meteorologica)
